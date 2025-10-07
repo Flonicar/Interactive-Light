@@ -97,7 +97,7 @@ python -m platformio run -e Interaktive_Lampe --target upload --upload-port COM3
 
 ### 3. WLED WebUI konfigurieren
 - **IP-Adresse** des ESP8266 aufrufen
-- **Usermods aktivieren**: ZDigBw_Buttons, ZDigBw_DFPlayer
+- **Usermods aktivieren**: Interaktive_Buttons, Interaktive_DFPlayer
 - **Musik-Preset konfigurieren** (Standard: Preset 2)
 - **LED-Strips konfigurieren**: 2 Strips (28 + 10 LEDs)
 
