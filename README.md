@@ -179,4 +179,4 @@ ZDigBw Lampe/
 Dieses Projekt ist für private Nutzung bestimmt.
 
 ## 👨‍💻 Autor
-Entwickelt für das ZDigBw Lampe Projekt.
+Entwickelt für das Interaktive Lampe Projekt.
