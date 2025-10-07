@@ -1,0 +1,60 @@
+# ZDigBw Lampe - Git Ignore File
+
+# WLED Build-Dateien
+wled_source/.pio/
+wled_source/build_output/
+wled_source/platformio.ini.bak
+
+# Arduino IDE
+*.ino.bak
+*.bak
+
+# PlatformIO
+.pio/
+.piolibdeps/
+.pioenvs/
+.pioproject/
+
+# Build-Output
+build_output/
+*.bin
+*.elf
+*.map
+
+# IDE-spezifische Dateien
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-spezifische Dateien
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Log-Dateien
+*.log
+
+# Temporäre Dateien
+*.tmp
+*.temp
+
+# Node.js (für WLED WebUI)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# WLED-spezifische Build-Dateien
+wled_source/tools/cdata.js
+wled_source/tools/webui/
+wled_source/tools/webui_build/
+
+# Backup-Dateien
+*.backup
+*.old
+
+# Kompilierte Binaries
+*.hex
+*.bin.gz
