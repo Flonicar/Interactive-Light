@@ -1,4 +1,4 @@
-# ZDigBw Lampe - Intelligente LED-Lampe mit Musik
+# Interaktive Lampe - Intelligente LED-Lampe mit Musik
 
 ## 🎯 Projektübersicht
 Eine intelligente Lampe mit **WS2812B LED-Strips**, gesteuert von einem **ESP8266** mit **WLED-Firmware**, **DFPlayer Mini MP3-Player** und **zwei programmierbaren Drucktastern**.
