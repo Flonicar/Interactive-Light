@@ -87,12 +87,12 @@ Button 2 (Musik + Zusätzlich):
 ### 1. WLED-Firmware kompilieren
 ```bash
 cd wled_source
-python -m platformio run -e ZDigBw_Lampe
+python -m platformio run -e Interaktive_Lampe
 ```
 
 ### 2. Firmware flashen
 ```bash
-python -m platformio run -e ZDigBw_Lampe --target upload --upload-port COM3
+python -m platformio run -e Interaktive_Lampe --target upload --upload-port COM3
 ```
 
 ### 3. WLED WebUI konfigurieren
@@ -125,7 +125,7 @@ python -m platformio run -e ZDigBw_Lampe --target upload --upload-port COM3
 
 ## 📁 Projektstruktur
 ```
-ZDigBw Lampe/
+Interaktive Lampe/
 ├── wled_source/                 # WLED-Firmware mit Usermods
 │   ├── usermods/
 │   │   ├── ZDigBw_Buttons/      # Button-Steuerung
