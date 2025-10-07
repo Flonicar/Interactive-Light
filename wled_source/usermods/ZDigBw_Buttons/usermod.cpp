@@ -1,11 +1,13 @@
 #include "wled.h"
 
 /*
- * ZDigBw Lampe - Button Usermod
+ * ZDigBw Lampe - Button Usermod mit verbessertem Debouncing
  * Erweitert WLED um zwei programmierbare Drucktaster
  * 
- * Button 1 (D6/GPIO12): AN/AUS + Effekte
+ * Button 1 (D6/GPIO12): AN/AUS + Presets
  * Button 2 (D7/GPIO13): Musik + Zusätzlich
+ * 
+ * Verbesserte Debouncing-Techniken basierend auf professionellen Bibliotheken
  */
 
 // Globale Variablen für DFPlayer-Kommunikation
@@ -18,55 +20,43 @@ private:
     bool enabled = true;
     bool initDone = false;
     
-    // Button Pins
-    int8_t button1Pin = 12;  // D6 - AN/AUS + Effekte
-    int8_t button2Pin = 13;  // D7 - Musik + Zusätzlich
+    // Button-Pins
+    int8_t button1Pin = 12;  // D6
+    int8_t button2Pin = 13;  // D7
     
-    // Button 1 Zustände
-    bool button1Pressed = false;
-    bool button1LongPressed = false;
-    unsigned long button1PressTime = 0;
-    unsigned long button1LastClick = 0;
-    int button1ClickCount = 0;
+    // Professionelles Debouncing (basierend auf button-debounce Bibliothek)
+    struct ButtonState {
+        bool currentState = false;      // Aktueller Hardware-Zustand
+        bool stableState = false;       // Stabiler, debounced Zustand
+        bool lastStableState = false;   // Vorheriger stabiler Zustand
+        unsigned long lastChangeTime = 0; // Zeit der letzten Zustandsänderung
+        unsigned long lastPressTime = 0;  // Zeit des letzten Drucks
+        unsigned long lastReleaseTime = 0; // Zeit des letzten Loslassens
+        int clickCount = 0;             // Anzahl der Klicks
+        bool longPressTriggered = false; // Lang-Druck bereits ausgelöst
+    };
     
-    // Button 2 Zustände
-    bool button2Pressed = false;
-    bool button2LongPressed = false;
-    unsigned long button2PressTime = 0;
-    unsigned long button2LastClick = 0;
-    int button2ClickCount = 0;
+    ButtonState button1;
+    ButtonState button2;
     
-    // Timing - Verbesserte Zuverlässigkeit
-    unsigned long lastButton1Check = 0;
-    unsigned long lastButton2Check = 0;
-    static const unsigned long BUTTON_CHECK_INTERVAL = 30;  // Häufigere Prüfung
-    static const unsigned long BUTTON_LONG_PRESS_TIME = 800;  // Kürzer für bessere Reaktion
-    static const unsigned long BUTTON_DOUBLE_CLICK_TIME = 400;  // Länger für zuverlässigere Erkennung
-    
-    // Button-Debouncing
-    static const int BUTTON_DEBOUNCE_COUNT = 3;  // Mehrfache Bestätigung
-    int button1DebounceCount = 0;
-    int button2DebounceCount = 0;
-    
-    // Helligkeitsstufen
-    int brightnessLevels[5] = {32, 64, 128, 192, 255};
-    int currentBrightnessLevel = 2;
-    
-    // Strings für Flash-Speicher
-    static const char _name[];
-    static const char _enabled[];
-    static const char _button1Pin[];
-    static const char _button2Pin[];
+    // Timing-Konstanten (optimiert für Zuverlässigkeit)
+    static const unsigned long DEBOUNCE_TIME = 50;        // ms - Zeit für stabilen Zustand
+    static const unsigned long LONG_PRESS_TIME = 800;     // ms - Zeit für Lang-Druck
+    static const unsigned long DOUBLE_CLICK_TIME = 400;   // ms - Zeit für Doppel-Klick
+    static const unsigned long POLL_INTERVAL = 20;        // ms - Polling-Intervall
 
 public:
     void setup() override {
         if (button1Pin >= 0) {
             pinMode(button1Pin, INPUT_PULLUP);
         }
+        
         if (button2Pin >= 0) {
             pinMode(button2Pin, INPUT_PULLUP);
         }
+        
         initDone = true;
+        Serial.println(F("ZDigBw Buttons Usermod initialisiert (verbessertes Debouncing)"));
     }
 
     void loop() override {
@@ -74,235 +64,111 @@ public:
         
         unsigned long currentTime = millis();
         
-            // Button 1 Update - Verbesserte Zuverlässigkeit
-            if (button1Pin >= 0 && currentTime - lastButton1Check >= BUTTON_CHECK_INTERVAL) {
-                bool currentState = digitalRead(button1Pin) == LOW; // LOW = gedrückt
-                
-                // Debouncing - mehrfache Bestätigung
-                if (currentState) {
-                    button1DebounceCount++;
-                    if (button1DebounceCount >= BUTTON_DEBOUNCE_COUNT && !button1Pressed) {
-                        // Button wurde zuverlässig gedrückt
-                        button1Pressed = true;
-                        button1PressTime = currentTime;
-                        button1LongPressed = false;
-                        button1DebounceCount = 0;
-                    }
-                } else {
-                    button1DebounceCount = 0;
-                    if (button1Pressed) {
-                        // Button wurde losgelassen
-                        button1Pressed = false;
-
-                        unsigned long pressDuration = currentTime - button1PressTime;
-
-                        if (pressDuration < BUTTON_LONG_PRESS_TIME) {
-                            // Kurzer Klick
-                            if (currentTime - button1LastClick < BUTTON_DOUBLE_CLICK_TIME) {
-                                button1ClickCount++;
-                            } else {
-                                button1ClickCount = 1;
-                            }
-                            button1LastClick = currentTime;
-                        }
-                    }
-                }
-                
-                if (button1Pressed && !button1LongPressed) {
-                    // Button ist gedrückt - prüfe auf Lang-Druck
-                    if (currentTime - button1PressTime >= BUTTON_LONG_PRESS_TIME) {
-                        button1LongPressed = true;
-                        // Sofort Lang-Druck-Aktion ausführen
-                        nextPreset();
-                    }
-                }
-
-                lastButton1Check = currentTime;
-            }
+        // Button 1 verarbeiten
+        if (button1Pin >= 0) {
+            processButton(button1, digitalRead(button1Pin) == LOW, currentTime, 1);
+        }
         
-        // Button 2 Update - Verbesserte Zuverlässigkeit
-        if (button2Pin >= 0 && currentTime - lastButton2Check >= BUTTON_CHECK_INTERVAL) {
-            bool currentState = digitalRead(button2Pin) == LOW; // LOW = gedrückt
+        // Button 2 verarbeiten
+        if (button2Pin >= 0) {
+            processButton(button2, digitalRead(button2Pin) == LOW, currentTime, 2);
+        }
+    }
+
+    // Professionelle Button-Verarbeitung mit verbessertem Debouncing
+    void processButton(ButtonState& btn, bool hardwareState, unsigned long currentTime, int buttonId) {
+        // Hardware-Zustand aktualisieren
+        btn.currentState = hardwareState;
+        
+        // Debouncing: Prüfe ob Zustand stabil ist
+        if (btn.currentState != btn.stableState) {
+            // Zustand hat sich geändert - starte Debounce-Timer
+            if (btn.lastChangeTime == 0) {
+                btn.lastChangeTime = currentTime;
+            }
             
-            // Debouncing - mehrfache Bestätigung
-            if (currentState) {
-                button2DebounceCount++;
-                if (button2DebounceCount >= BUTTON_DEBOUNCE_COUNT && !button2Pressed) {
-                    // Button wurde zuverlässig gedrückt
-                    button2Pressed = true;
-                    button2PressTime = currentTime;
-                    button2LongPressed = false;
-                    button2DebounceCount = 0;
-                }
-            } else {
-                button2DebounceCount = 0;
-                if (button2Pressed) {
+            // Prüfe ob Debounce-Zeit abgelaufen ist
+            if (currentTime - btn.lastChangeTime >= DEBOUNCE_TIME) {
+                // Zustand ist stabil - aktualisiere stabilen Zustand
+                btn.stableState = btn.currentState;
+                btn.lastChangeTime = 0;
+                
+                // Verarbeite Zustandsänderung
+                if (btn.stableState && !btn.lastStableState) {
+                    // Button wurde gedrückt
+                    btn.lastPressTime = currentTime;
+                    btn.longPressTriggered = false;
+                    
+                    // Klick-Zählung für Doppel-Klick
+                    if (currentTime - btn.lastReleaseTime < DOUBLE_CLICK_TIME) {
+                        btn.clickCount++;
+                    } else {
+                        btn.clickCount = 1;
+                    }
+                    
+                } else if (!btn.stableState && btn.lastStableState) {
                     // Button wurde losgelassen
-                    button2Pressed = false;
+                    btn.lastReleaseTime = currentTime;
                     
-                    unsigned long pressDuration = currentTime - button2PressTime;
-                    
-                    if (pressDuration < BUTTON_LONG_PRESS_TIME) {
-                        // Kurzer Klick
-                        if (currentTime - button2LastClick < BUTTON_DOUBLE_CLICK_TIME) {
-                            button2ClickCount++;
+                    // Verarbeite Klick-Aktionen
+                    if (btn.clickCount == 1 && !btn.longPressTriggered) {
+                        // Einfacher Klick
+                        if (buttonId == 1) {
+                            togglePower();
                         } else {
-                            button2ClickCount = 1;
+                            toggleMusic();
                         }
-                        button2LastClick = currentTime;
                     }
+                    
+                    btn.clickCount = 0;
                 }
+                
+                btn.lastStableState = btn.stableState;
             }
-            
-            if (button2Pressed && !button2LongPressed) {
-                // Button ist gedrückt - prüfe auf Lang-Druck
-                if (currentTime - button2PressTime >= BUTTON_LONG_PRESS_TIME) {
-                    button2LongPressed = true;
-                    // Sofort Lang-Druck-Aktion ausführen
-                    nextTrack();
-                }
-            }
-            
-            lastButton2Check = currentTime;
-        }
-        
-        // Button 1 Aktionen
-        if (button1ClickCount == 1 && currentTime - button1LastClick >= BUTTON_DOUBLE_CLICK_TIME) {
-            // Einfacher Klick: AN/AUS
-            togglePower();
-            button1ClickCount = 0;
-        }
-        
-        // Lang-Druck wird bereits in der Button-Logik behandelt
-        
-        if (button1ClickCount >= 2) {
-            // Doppel-Klick: Helligkeit ändern
-            changeBrightness();
-            button1ClickCount = 0;
-        }
-        
-        // Button 2 Aktionen (für DFPlayer - wird in separatem Usermod implementiert)
-        if (button2ClickCount == 1 && currentTime - button2LastClick >= BUTTON_DOUBLE_CLICK_TIME) {
-            // Einfacher Klick: Musik Start/Stop
-            toggleMusic();
-            button2ClickCount = 0;
-        }
-        
-        // Lang-Druck wird bereits in der Button-Logik behandelt
-        
-        if (button2ClickCount >= 2) {
-            // Doppel-Klick: Lautstärke ändern
-            changeVolume();
-            button2ClickCount = 0;
-        }
-    }
-
-    void addToJsonInfo(JsonObject& root) override {
-        JsonObject user = root["u"];
-        if (user.isNull()) user = root.createNestedObject("u");
-        
-        JsonArray info = user.createNestedArray(FPSTR(_name));
-        info.add(F("Button 1: AN/AUS + Effekte"));
-        info.add(F("Button 2: Musik + Zusätzlich"));
-    }
-
-    void addToJsonState(JsonObject& root) override {
-        if (!initDone) return;
-        
-        JsonObject usermod = root[FPSTR(_name)];
-        if (usermod.isNull()) usermod = root.createNestedObject(FPSTR(_name));
-        
-        usermod["button1Pin"] = button1Pin;
-        usermod["button2Pin"] = button2Pin;
-        usermod["brightnessLevel"] = currentBrightnessLevel;
-    }
-
-    void readFromJsonState(JsonObject& root) override {
-        if (!initDone) return;
-        
-        JsonObject usermod = root[FPSTR(_name)];
-        if (!usermod.isNull()) {
-            // Button-Pins können über JSON geändert werden
-            if (usermod["button1Pin"] != nullptr) button1Pin = usermod["button1Pin"];
-            if (usermod["button2Pin"] != nullptr) button2Pin = usermod["button2Pin"];
-        }
-    }
-
-    void addToConfig(JsonObject& root) override {
-        JsonObject top = root.createNestedObject(FPSTR(_name));
-        top[FPSTR(_enabled)] = enabled;
-        top[FPSTR(_button1Pin)] = button1Pin;
-        top[FPSTR(_button2Pin)] = button2Pin;
-    }
-
-    bool readFromConfig(JsonObject& root) override {
-        JsonObject top = root[FPSTR(_name)];
-        
-        bool configComplete = !top.isNull();
-        configComplete &= getJsonValue(top[FPSTR(_enabled)], enabled);
-        configComplete &= getJsonValue(top[FPSTR(_button1Pin)], button1Pin, 12);
-        configComplete &= getJsonValue(top[FPSTR(_button2Pin)], button2Pin, 13);
-        
-        return configComplete;
-    }
-
-    void appendConfigData() override {
-        oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":button1Pin")); oappend(F("',1,'Button 1 Pin (D6/GPIO12)');"));
-        oappend(F("addInfo('")); oappend(String(FPSTR(_name)).c_str()); oappend(F(":button2Pin")); oappend(F("',1,'Button 2 Pin (D7/GPIO13)');"));
-    }
-
-    uint16_t getId() override {
-        return USERMOD_ID_BUTTONS;
-    }
-
-private:
-    void togglePower() {
-        if (bri == 0) {
-            bri = briLast;
-            if (bri == 0) bri = 128;
         } else {
+            // Zustand ist stabil - reset Debounce-Timer
+            btn.lastChangeTime = 0;
+        }
+        
+        // Lang-Druck-Erkennung
+        if (btn.stableState && !btn.longPressTriggered && 
+            currentTime - btn.lastPressTime >= LONG_PRESS_TIME) {
+            
+            btn.longPressTriggered = true;
+            
+            if (buttonId == 1) {
+                nextPreset();
+            } else {
+                nextTrack();
+            }
+        }
+        
+        // Doppel-Klick-Erkennung
+        if (btn.clickCount >= 2 && currentTime - btn.lastReleaseTime >= DOUBLE_CLICK_TIME) {
+            if (buttonId == 1) {
+                changeBrightness();
+            } else {
+                changeVolume();
+            }
+            btn.clickCount = 0;
+        }
+    }
+
+    void togglePower() {
+        if (bri) {
             briLast = bri;
             bri = 0;
+        } else {
+            bri = briLast;
         }
         stateUpdated(CALL_MODE_BUTTON);
+        Serial.println(F("Power umgeschaltet"));
     }
 
     void nextPreset() {
-        // Preset wechseln - verwende WLED's eingebaute Preset-Funktionalität!
-        Serial.println(F("Preset wechseln..."));
-        
-        // Stelle sicher, dass die Lampe eingeschaltet ist
-        if (bri == 0) {
-            bri = 128; // Mittlere Helligkeit
-            Serial.println(F("Lampe eingeschaltet für Preset"));
-        }
-        
-        // Verwende WLED's echte Preset-Funktionalität!
-        // Das lädt echte WLED-Presets aus der WebUI
-        
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
-        // Das ist generisch und funktioniert mit beliebig vielen Presets!
-        
-        // Einfache Lösung: Verwende WLED's eingebaute Preset-Cycling
-        // Das wechselt automatisch zwischen allen verfügbaren Presets
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
         // Intelligente Lösung: Wechsle nur zwischen tatsächlich vorhandenen Presets
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
-        
-        // Intelligente Lösung: Wechsle nur zwischen tatsächlich vorhandenen Presets
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
-        
-        // Intelligente Lösung: Wechsle nur zwischen tatsächlich vorhandenen Presets
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
-        
-        // Intelligente Lösung: Wechsle nur zwischen tatsächlich vorhandenen Presets
-        // Verwende WLED's eingebaute Preset-Cycling-Funktionalität
-        
-        // Einfache Lösung: Verwende WLED's eingebaute Preset-Cycling
-        // Das wechselt automatisch zwischen allen verfügbaren Presets
         static int currentPreset = 1; // Beginnt bei 1
         
-        // Intelligente Lösung: Wechsle nur zwischen verfügbaren Presets
         // Konfigurierbare Anzahl von Presets (ändern Sie die 3 auf Ihre Anzahl)
         const int maxPresets = 3; // HIER IHRE ANZAHL EINTRAGEN!
         currentPreset = (currentPreset % maxPresets) + 1; // 1-3 Presets
@@ -310,40 +176,102 @@ private:
         // Verwende WLED's eingebaute Preset-Funktion
         applyPreset(currentPreset);
         
-        Serial.print(F("Versuche Preset ")); Serial.println(currentPreset);
-        
-        Serial.println(F("WLED Preset-Cycling aktiviert (generisch)"));
-        
+        Serial.print(F("Preset ")); Serial.println(currentPreset);
         stateUpdated(CALL_MODE_BUTTON);
     }
 
     void changeBrightness() {
-        currentBrightnessLevel = (currentBrightnessLevel + 1) % 5;
-        bri = brightnessLevels[currentBrightnessLevel];
+        if (bri > 128) {
+            bri = 63;   // Mittel
+        } else if (bri > 63) {
+            bri = 15;   // Niedrig
+        } else {
+            bri = 255;  // Hoch
+        }
         stateUpdated(CALL_MODE_BUTTON);
+        Serial.print(F("Helligkeit: ")); Serial.println(bri);
     }
 
     void toggleMusic() {
         dfPlayerPlayPause = true;
-        Serial.println(F("Button 2: Musik Start/Stop"));
+        Serial.println(F("Musik Start/Stop"));
     }
 
     void nextTrack() {
         dfPlayerNextTrack = true;
-        Serial.println(F("Button 2: Nächster Track"));
+        Serial.println(F("Nächster Track"));
     }
 
     void changeVolume() {
         dfPlayerChangeVolume = true;
-        Serial.println(F("Button 2: Lautstärke ändern"));
+        Serial.println(F("Lautstärke ändern"));
+    }
+
+    void addToJsonInfo(JsonObject& root) override {
+        JsonObject user = root["u"];
+        if (user.isNull()) user = root.createNestedObject("u");
+        
+        JsonArray info = user.createNestedArray(F("ZDigBw Buttons"));
+        info.add(F("Button 1: Power + Presets"));
+        info.add(F("Button 2: Musik + Zusätzlich"));
+        info.add(F("Verbessertes Debouncing"));
+    }
+
+    void addToJsonState(JsonObject& root) override {
+        JsonObject user = root["u"];
+        if (user.isNull()) user = root.createNestedObject("u");
+        
+        user["button1Pin"] = button1Pin;
+        user["button2Pin"] = button2Pin;
+        user["debounceTime"] = DEBOUNCE_TIME;
+        user["longPressTime"] = LONG_PRESS_TIME;
+    }
+
+    void readFromJsonState(JsonObject& root) override {
+        JsonObject user = root["u"];
+        if (user.isNull()) return;
+        
+        if (user["button1Pin"].is<int>()) button1Pin = user["button1Pin"];
+        if (user["button2Pin"].is<int>()) button2Pin = user["button2Pin"];
+    }
+
+    void addToConfig(JsonObject& root) override {
+        JsonObject top = root["top"];
+        if (top.isNull()) top = root.createNestedObject("top");
+        
+        JsonArray pins = top.createNestedArray(F("Button Pins"));
+        pins.add(button1Pin);
+        pins.add(button2Pin);
+    }
+
+    void readFromConfig(JsonObject& root) override {
+        JsonObject top = root["top"];
+        if (top.isNull()) return;
+        
+        if (top["Button Pins"].is<JsonArray>()) {
+            JsonArray pins = top["Button Pins"];
+            if (pins.size() >= 2) {
+                button1Pin = pins[0];
+                button2Pin = pins[1];
+            }
+        }
+    }
+
+    void appendConfigData() override {
+        oappend(SET_F("addInfo('ZDigBw Buttons - Verbessertes Debouncing');"));
+    }
+
+    uint16_t getId() override {
+        return USERMOD_ID_BUTTONS;
     }
 };
 
-// Strings für Flash-Speicher
-const char ZDigBwButtonsUsermod::_name[] PROGMEM = "ZDigBwButtons";
-const char ZDigBwButtonsUsermod::_enabled[] PROGMEM = "enabled";
-const char ZDigBwButtonsUsermod::_button1Pin[] PROGMEM = "button1Pin";
-const char ZDigBwButtonsUsermod::_button2Pin[] PROGMEM = "button2Pin";
+// Usermod-Instanz erstellen
+ZDigBwButtonsUsermod* ZDigBwButtonsUsermodInstance = nullptr;
 
-static ZDigBwButtonsUsermod buttons_usermod;
-REGISTER_USERMOD(buttons_usermod);
+void registerZDigBwButtonsUsermod() {
+    if (ZDigBwButtonsUsermodInstance == nullptr) {
+        ZDigBwButtonsUsermodInstance = new ZDigBwButtonsUsermod();
+        usermods.add(ZDigBwButtonsUsermodInstance);
+    }
+}
