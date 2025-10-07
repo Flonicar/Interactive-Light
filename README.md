@@ -128,8 +128,8 @@ python -m platformio run -e Interaktive_Lampe --target upload --upload-port COM3
 Interaktive Lampe/
 ├── wled_source/                 # WLED-Firmware mit Usermods
 │   ├── usermods/
-│   │   ├── ZDigBw_Buttons/      # Button-Steuerung
-│   │   └── ZDigBw_DFPlayer/     # MP3-Player
+│   │   ├── Interaktive_Buttons/      # Button-Steuerung
+│   │   └── Interaktive_DFPlayer/     # MP3-Player
 │   ├── platformio_override.ini # Build-Konfiguration
 │   └── wled00/my_config.h      # LED-Konfiguration
 ├── verkabelung.md              # Detaillierte Verkabelung
